@@ -726,6 +726,7 @@ body.menu-open #scrim{opacity:1;visibility:visible;transition:opacity .24s ease,
       <p class="text-red-100 text-sm mt-1">Plataforma territorial · C.P. 97343</p>
     </div>
     <div class="w-full max-w-md bg-white rounded-[1.75rem] shadow-2xl p-6 sm:p-7 fade">
+      <div id="auth-load" class="text-center text-sm text-stone-600 py-6"><i class="fa-solid fa-circle-notch fa-spin text-red-600 text-xl mb-2 block"></i><span id="auth-load-t">Conectando…</span></div>
       <!-- Configuración inicial (solo la primera vez) -->
       <form id="f-setup" class="hidden space-y-3" onsubmit="doSetup(event)">
         <div><h2 class="text-xl font-extrabold">Configuración inicial</h2><p class="text-sm text-stone-500 mt-1">Crea la cuenta del administrador. Solo existirá un administrador.</p></div>
@@ -926,12 +927,21 @@ function listen() {
 function loadFB() {
   return new Promise(ok => {
     if (!FIREBASE_CONFIG) return ok(null);
+    // Dos servidores para el SDK: si uno falla o se queda colgado con datos móviles, se prueba el otro
+    const HOSTS = ['https://www.gstatic.com/firebasejs/10.12.2/', 'https://cdn.jsdelivr.net/npm/firebase@10.12.2/'];
+    const add = src => new Promise((r, j) => {
+      const t = document.createElement('script');
+      const to = setTimeout(() => { t.onload = t.onerror = null; t.remove(); j(new Error('timeout')); }, 15000);
+      t.onload = () => { clearTimeout(to); r(); };
+      t.onerror = () => { clearTimeout(to); t.remove(); j(new Error('error')); };
+      t.src = src; document.head.appendChild(t);
+    });
     const go = n => {
-    const add = src => new Promise((r, j) => { const t = document.createElement('script'); t.src = src; t.onload = r; t.onerror = j; document.head.appendChild(t); });
-    const B = 'https://www.gstatic.com/firebasejs/10.12.2/';
-    add(B + 'firebase-app-compat.js').then(() => Promise.all([add(B + 'firebase-database-compat.js'), add(B + 'firebase-auth-compat.js')]))
-      .then(() => { firebase.initializeApp(FIREBASE_CONFIG); fbAuth = firebase.auth(); const d = firebase.database(); try { d.INTERNAL.forceLongPolling(); } catch (x) { } ok(d); })
-      .catch(() => { if (n < 2) setTimeout(() => go(n + 1), 1500); else ok(null); });
+      const B = HOSTS[n % HOSTS.length];
+      try { delete window.firebase; } catch (x) { window.firebase = undefined; }
+      add(B + 'firebase-app-compat.js').then(() => Promise.all([add(B + 'firebase-database-compat.js'), add(B + 'firebase-auth-compat.js')]))
+        .then(() => { firebase.initializeApp(FIREBASE_CONFIG); fbAuth = firebase.auth(); const d = firebase.database(); try { d.INTERNAL.forceLongPolling(); } catch (x) { } ok(d); })
+        .catch(() => { if (n < 2) setTimeout(() => go(n + 1), 1000); else ok(null); });
     };
     go(0);
   });
@@ -988,6 +998,7 @@ function authMsg(e) {
   return 'No se pudo completar (' + c + ')';
 }
 function renderAuth() {
+  const AL = $('auth-load'); if (AL) AL.classList.add('hidden');
   const off = !rdb;
   let m = $('auth-msg'); if (!m) { m = document.createElement('div'); m.id = 'auth-msg'; m.className = 'text-center text-sm text-stone-600 py-6'; $('f-setup').parentNode.insertBefore(m, $('f-setup')); }
   m.classList.toggle('hidden', !off);
@@ -1440,7 +1451,8 @@ function passFromNote(id) { const n = S.notes[id], u = n && list('users').find(x
 
 // ---------- inicio ----------
 window.addEventListener('load', async () => {
-  rdb = await loadFB(); badge();
+  const slowT = setTimeout(() => { const e = $('auth-load-t'); if (e) e.textContent = 'Conectando… con datos móviles puede tardar unos segundos'; }, 5000);
+  rdb = await loadFB(); clearTimeout(slowT); badge();
   if (!rdb) { renderAuth(); return; }
   fbAuth.onAuthStateChanged(async user => {
     if (setupBusy) return;
