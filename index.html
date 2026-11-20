@@ -2,6 +2,9 @@
 <html lang="es" class="h-full">
 <head>
 <meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdn.jsdelivr.net https://apis.google.com https://*.firebaseio.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://server.arcgisonline.com https://tile.openstreetmap.org https://*.tile.openstreetmap.org https://*.googleapis.com https://*.gstatic.com https://*.google.com; font-src 'self' data:; connect-src 'self' https://*.firebaseio.com wss://*.firebaseio.com https://*.googleapis.com https://*.firebaseapp.com; frame-src https://www.google.com https://maps.google.com https://*.firebaseapp.com https://*.firebaseio.com https://accounts.google.com; object-src 'none'; base-uri 'none'; form-action 'none'">
+<style id="fb-guard">html{display:none!important}</style>
+<script>(function(){if(window.top===window.self){var g=document.getElementById('fb-guard');if(g)g.remove();}else{try{window.top.location=window.self.location;}catch(e){}}})();</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#b91c1c">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -732,8 +735,8 @@ body.menu-open #scrim{opacity:1;visibility:visible;transition:opacity .24s ease,
         <div><h2 class="text-xl font-extrabold">Configuración inicial</h2><p class="text-sm text-stone-500 mt-1">Crea la cuenta del administrador. Solo existirá un administrador.</p></div>
         <div><label class="lbl">Nombre completo</label><input id="s-name" required class="inp" autocomplete="name"></div>
         <div><label class="lbl">Correo</label><input id="s-email" type="email" required class="inp" autocomplete="username"></div>
-        <div><label class="lbl">Contraseña (mínimo 8)</label><input id="s-pw" type="password" minlength="8" required class="inp" autocomplete="new-password"></div>
-        <div><label class="lbl">Repite la contraseña</label><input id="s-pw2" type="password" minlength="8" required class="inp" autocomplete="new-password"></div>
+        <div><label class="lbl">Contraseña (mínimo 10, con letras y números)</label><input id="s-pw" type="password" minlength="10" required class="inp" autocomplete="new-password"></div>
+        <div><label class="lbl">Repite la contraseña</label><input id="s-pw2" type="password" minlength="10" required class="inp" autocomplete="new-password"></div>
         <button class="btn w-full !py-3.5">Crear administrador</button>
       </form>
       <!-- Inicio de sesión -->
@@ -789,7 +792,7 @@ body.menu-open #scrim{opacity:1;visibility:visible;transition:opacity .24s ease,
               <button id="gk" onclick="setG('k')" class="shrink-0 rounded-xl px-3 py-2 text-sm font-bold bg-stone-100">Satélite</button>
               <a id="gopen" target="_blank" rel="noopener" class="shrink-0 rounded-xl px-3 py-2 text-sm font-bold bg-blue-50 text-blue-700">Abrir en Google Maps <i class="fa-solid fa-arrow-up-right-from-square ml-1"></i></a>
             </div>
-            <iframe id="gframe" title="Google Maps" class="flex-1 w-full border-0" referrerpolicy="no-referrer-when-downgrade" allowfullscreen></iframe>
+            <iframe id="gframe" title="Google Maps" class="flex-1 w-full border-0" referrerpolicy="no-referrer-when-downgrade" sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-forms" allowfullscreen></iframe>
           </div>
           <div id="nomap" class="hidden absolute inset-0 z-[400] flex items-center justify-center p-6 pointer-events-none"><div class="pointer-events-auto bg-white rounded-2xl shadow-2xl p-5 text-center max-w-xs"><div class="w-14 h-14 mx-auto rounded-2xl bg-red-50 text-red-600 flex items-center justify-center text-2xl mb-2"><i class="fa-solid fa-map"></i></div><div class="font-extrabold">No se pudo cargar el mapa</div><p id="nomap-t" class="text-sm text-stone-500 mt-1">Revisa tu conexión.</p><button onclick="retryMap()" class="btn mt-3 w-full">Reintentar</button><button onclick="showGoogle()" class="mt-2 w-full rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 py-3 font-bold transition"><i class="fa-solid fa-earth-americas"></i> Ver con Google Maps</button></div></div>
           <div class="absolute top-3 left-3 right-[5.5rem] z-[500] flex gap-2 items-center">
@@ -875,14 +878,90 @@ const VST = { pending: ['Pendiente', 'bg-amber-100 text-amber-800', 'border-l-am
 const COLL = ['users', 'pins', 'visits', 'logs', 'notes'];
 const ONLINE_MS = 90000;
 const $ = id => document.getElementById(id);
-const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const esc = s => String(s ?? '').replace(/[&<>"'`]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '`': '&#96;' }[c]));
+// Evita que Excel ejecute como fórmula un texto que empieza con = + - @ (inyección en CSV)
+const csvSafe = v => { v = String(v ?? ''); return (/^[=+\-@\t\r]/.test(v) && !/^\+?[\d\s().-]+$/.test(v)) ? "'" + v : v; };
+const uid = () => Date.now().toString(36) + Array.from((crypto.getRandomValues ? crypto.getRandomValues(new Uint8Array(8)) : Array.from({ length: 8 }, () => Math.random() * 255)), b => (b % 36).toString(36)).join('');
 const fdt = t => new Date(t).toLocaleString('es-MX', { dateStyle: 'medium', timeStyle: 'medium' });
 const ago = t => { if (!t) return 'nunca'; const s = Math.round((Date.now() - t) / 1000); return s < 60 ? 'hace ' + s + ' s' : s < 3600 ? 'hace ' + Math.round(s / 60) + ' min' : s < 86400 ? 'hace ' + Math.round(s / 3600) + ' h' : fdt(t); };
 const ini = n => String(n || '?').split(/\s+/).map(x => x[0]).join('').slice(0, 2).toUpperCase();
 const rnd = n => { const a = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let s = ''; const r = crypto.getRandomValues ? crypto.getRandomValues(new Uint8Array(n)) : Array.from({ length: n }, () => Math.random() * 255); for (let i = 0; i < n; i++) s += a[r[i] % a.length]; return s; };
 
-let S = (() => { try { const s = JSON.parse(localStorage.getItem('ixil_v4')); if (s) return s; } catch (e) { } return { users: {}, pins: {}, visits: {}, logs: {}, notes: {}, dels: [] }; })();
+// ---------- saneamiento: todo dato que llega de la red, del almacenamiento local o de un respaldo pasa por aquí ----------
+const KNOWN_COLL = ['users', 'pins', 'visits', 'logs', 'notes', 'blocks', 'members', 'leaders', 'reqs', 'mzcfg'];
+const BAD_KEYS = ['__proto__', 'constructor', 'prototype', 'hasOwnProperty'];
+const okId = k => typeof k === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(k) && !BAD_KEYS.includes(k);
+const sStr = (v, n = 5000) => (v === null || v === undefined) ? '' : String(v).slice(0, n);
+const sNum = (v, d = 0) => { const n = Number(v); return Number.isFinite(n) ? n : d; };
+const sDate = v => /^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : '';
+const sRef = v => (v === '' || v === null || v === undefined) ? '' : (okId(String(v)) ? String(v) : '');
+let ADMIN_UID = null;   // uid del administrador registrado (null = todavía no se sabe)
+const ENUM = {   // el primer valor es el que se usa si llega uno inválido
+  pins: { status: ['doubtful', 'secure', 'danger'] },
+  visits: { status: ['pending', 'completed', 'rejected'] },
+  members: { stance: ['duda', 'favor', 'contra'] },
+  reqs: { st: ['pend', 'proc', 'ok'], ot: ['member', 'block', 'leader'] }
+};
+function cleanRec(c, r, key) {
+  if (!r || typeof r !== 'object' || Array.isArray(r) || !okId(key)) return null;
+  const o = {};
+  for (const k of Object.keys(r)) {
+    if (BAD_KEYS.includes(k)) continue;
+    const v = r[k];
+    if (v === null || v === undefined) continue;
+    if (typeof v === 'string') o[k] = v.slice(0, 5000);
+    else if (typeof v === 'number') o[k] = Number.isFinite(v) ? v : 0;
+    else if (typeof v === 'boolean') o[k] = v;
+    else if (k === 'hist' && Array.isArray(v)) o.hist = v.slice(0, 200).map(h => ({ n: sStr(h && h.n, 300), t: sNum(h && h.t) }));
+    // cualquier otro objeto o arreglo se descarta
+  }
+  o.id = key;
+  ['u', 't', 'created', 'lastSeen', 'acc'].forEach(k => { if (k in o) o[k] = sNum(o[k]); });
+  ['date', 'lastContact', 'upd'].forEach(k => { if (k in o) o[k] = sDate(o[k]); });
+  ['active', 'mustChange', 'deleted', 'open', 'consent'].forEach(k => { if (k in o) o[k] = !!o[k]; });
+  ['lat', 'lng', 'goal', 'own', 'peopleCount', 'total'].forEach(k => { if (k in o) o[k] = sNum(o[k]); });
+  ['byUid', 'blockId', 'leaderId', 'oid'].forEach(k => { if (k in o) o[k] = sRef(o[k]); });
+  if (['pins', 'blocks', 'leaders'].includes(c)) {   // sin coordenadas válidas el registro se descarta
+    const pn = v => typeof v === 'number' ? v : (typeof v === 'string' && v.trim() !== '' ? Number(v) : NaN), la = pn(r.lat), lo = pn(r.lng);
+    if (!(Math.abs(la) <= 90 && Math.abs(lo) <= 180)) return null;
+  }
+  const E = ENUM[c]; if (E) for (const k of Object.keys(E)) if (!E[k].includes(o[k])) o[k] = E[k][0];
+  if (c === 'users') {
+    o.name = sStr(o.name, 300); o.email = sStr(o.email, 320); o.active = !!o.active; o.mustChange = !!o.mustChange;
+    // el rol de administrador solo vale para la cuenta registrada como administrador
+    o.role = (o.role === 'admin' && (!ADMIN_UID || key === ADMIN_UID)) ? 'admin' : 'brigadista';
+  }
+  if (c === 'notes') o.k = /^[a-z]{1,12}$/.test(o.k || '') ? o.k : 'mov';
+  return o;
+}
+function cleanMap(c, raw) {
+  const out = {};
+  if (!raw || typeof raw !== 'object') return out;
+  for (const k of Object.keys(raw)) { const r = cleanRec(c, raw[k], k); if (r) out[k] = r; }
+  return out;
+}
+function cleanState(st) {
+  const o = { dels: [] };
+  if (!st || typeof st !== 'object') st = {};
+  KNOWN_COLL.forEach(c => { o[c] = cleanMap(c, st[c]); });
+  if (Array.isArray(st.dels)) o.dels = st.dels.filter(d => Array.isArray(d) && KNOWN_COLL.includes(d[0]) && okId(d[1])).slice(0, 5000).map(d => [d[0], d[1]]);
+  return o;
+}
+function cleanLocs(raw) {
+  const out = {};
+  if (!raw || typeof raw !== 'object') return out;
+  for (const k of Object.keys(raw)) {
+    const r = raw[k]; if (!okId(k) || !r || typeof r !== 'object') continue;
+    const lat = Number(r.lat), lng = Number(r.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) continue;
+    out[k] = { name: sStr(r.name, 300), email: sStr(r.email, 320), lat, lng, acc: Math.max(0, Math.round(sNum(r.acc))), t: sNum(r.t) };
+  }
+  return out;
+}
+const pwOk = p => typeof p === 'string' && p.length >= 10 && /[A-Za-z]/.test(p) && /\d/.test(p);
+const PW_MSG = 'La contraseña debe tener al menos 10 caracteres, con letras y números.';
+
+let S = (() => { try { const s = JSON.parse(localStorage.getItem('ixil_v4')); if (s) return cleanState(s); } catch (e) { } return cleanState({}); })();
 let me = null, map = null, rdb = null, tab = 'map', F = 'all', charts = [];
 const isAdmin = () => me && me.role === 'admin';
 const persist = () => localStorage.setItem('ixil_v4', JSON.stringify(S));
@@ -896,6 +975,8 @@ const REMOTE_ONLY = ['logs', 'notes'];   // un brigadista solo los envía, no lo
 let lastLogP = null, lastLocP = null, fbAuth = null;
 function put(c, r) {
   r.u = Date.now();
+  const cu = fbAuth && fbAuth.currentUser;
+  if (cu && (c === 'logs' || c === 'notes')) { r.uid = cu.uid; if (c === 'logs' && cu.email) r.email = cu.email.toLowerCase(); }
   if (!(REMOTE_ONLY.includes(c) && !isAdmin())) { (S[c] || (S[c] = {}))[r.id] = r; persist(); }
   return rdb ? rdb.ref('ixil/' + c + '/' + r.id).set(r).catch(e => console.warn('No se pudo guardar en ' + c, e && e.code)) : Promise.resolve();
 }
@@ -912,7 +993,7 @@ function listen() {
   feeds.forEach(([c, ref, single]) => {
     seen[c] = new Set(); if (!S[c]) S[c] = {};
     ref.on('value', snap => {
-      const raw = snap.val(), rem = single ? (raw ? { [my]: raw } : {}) : (raw || {});
+      const raw = snap.val(), rem = cleanMap(c, single ? (raw ? { [my]: raw } : {}) : (raw || {}));
       Object.keys(rem).forEach(id => { seen[c].add(id); const l = S[c][id]; if (!l || (rem[id].u || 0) >= (l.u || 0)) S[c][id] = rem[id]; else rdb.ref('ixil/' + c + '/' + id).set(l).catch(() => { }); });
       Object.keys(S[c]).forEach(id => {
         if (rem[id]) return;
@@ -934,6 +1015,9 @@ function loadFB() {
       const to = setTimeout(() => { t.onload = t.onerror = null; t.remove(); j(new Error('timeout')); }, 15000);
       t.onload = () => { clearTimeout(to); r(); };
       t.onerror = () => { clearTimeout(to); t.remove(); j(new Error('error')); };
+      const SRI = { 'firebase-app-compat.js': 'sha384-AQ3POAMqIhwS81FrUH95ekxqBZHeP5tG2JfEL3+7GuTtfRLWnrRh32UxwzM+//A9', 'firebase-database-compat.js': 'sha384-1/m+A1jVWbD3yiK3/vtFvm1+LjK1WLpSoDY+Kaxppwn/yP9BVSgdHTNQVOjrzUO5', 'firebase-auth-compat.js': 'sha384-TnlRYaR4JYz/lpaGuaiU61PjNberSA4vjLjtF+oRC/IkohkJqnWxw5EmDSOt1vA1' };
+      const fn = src.split('/').pop();
+      if (src.indexOf('https://cdn.jsdelivr.net/') === 0 && SRI[fn]) { t.integrity = SRI[fn]; t.crossOrigin = 'anonymous'; }   // el servidor de respaldo solo ejecuta el archivo exacto esperado
       t.src = src; document.head.appendChild(t);
     });
     const go = n => {
@@ -989,7 +1073,7 @@ function authMsg(e) {
   if (/invalid-credential|wrong-password|user-not-found|invalid-login/.test(c)) return 'Correo o contraseña incorrectos';
   if (/too-many-requests/.test(c)) return 'Demasiados intentos. Espera unos minutos e inténtalo de nuevo.';
   if (/email-already-in-use/.test(c)) return 'Ese correo ya tiene una cuenta';
-  if (/weak-password/.test(c)) return 'La contraseña es muy débil (mínimo 8 caracteres)';
+  if (/weak-password/.test(c)) return 'La contraseña es muy débil (mínimo 10 caracteres, con letras y números)';
   if (/invalid-email/.test(c)) return 'El correo no es válido';
   if (/network/.test(c)) return 'Sin internet. Revisa tu conexión.';
   if (/requires-recent-login/.test(c)) return 'Vuelve a iniciar sesión e inténtalo otra vez.';
@@ -1009,7 +1093,7 @@ function renderAuth() {
 
 async function doSetup(e) {
   e.preventDefault(); if (!needSetup()) return;
-  const pw = $('s-pw').value; if (pw !== $('s-pw2').value) return toast('Las contraseñas no coinciden', 'err');
+  const pw = $('s-pw').value; if (pw !== $('s-pw2').value) return toast('Las contraseñas no coinciden', 'err'); if (!pwOk(pw)) return toast(PW_MSG, 'err');
   const email = $('s-email').value.trim().toLowerCase(), name = $('s-name').value.trim();
   setupBusy = true; let cred = null;
   try {
@@ -1017,7 +1101,7 @@ async function doSetup(e) {
     await rdb.ref('ixil/config/adminUid').set(cred.user.uid);   // solo se puede escribir una vez
     const u = { id: cred.user.uid, name, email, role: 'admin', active: true, mustChange: false, created: Date.now(), u: Date.now() };
     await rdb.ref('ixil/users/' + u.id).set(u);
-    adminUidCache = u.id; setupBusy = false; justLoggedIn = true;
+    adminUidCache = u.id; ADMIN_UID = u.id; setupBusy = false; justLoggedIn = true;
     await resumeSession(cred.user);
   } catch (err) {
     setupBusy = false;
@@ -1025,21 +1109,25 @@ async function doSetup(e) {
     await loadSetupState(); renderAuth(); toast(authMsg(err), 'err');
   }
 }
+let lgFails = 0, lgLock = 0;   // freno local contra adivinar contraseñas (Firebase también limita desde el servidor)
 async function doLogin(e) {
   e.preventDefault();
+  if (Date.now() < lgLock) return toast('Demasiados intentos. Espera ' + Math.ceil((lgLock - Date.now()) / 1000) + ' s e inténtalo de nuevo.', 'err');
   const em = $('l-email').value.trim().toLowerCase(), pw = $('l-pw').value, P = firebase.auth.Auth.Persistence;
   try {
     await fbAuth.setPersistence($('l-rem').checked ? P.LOCAL : P.SESSION);
     justLoggedIn = true;
-    await fbAuth.signInWithEmailAndPassword(em, pw);   // al entrar, onAuthStateChanged continúa el proceso
-  } catch (err) { justLoggedIn = false; toast(authMsg(err), 'err'); }
+    await fbAuth.signInWithEmailAndPassword(em, pw); lgFails = 0;   // al entrar, onAuthStateChanged continúa el proceso
+  } catch (err) { justLoggedIn = false; if (/invalid-credential|wrong-password|user-not-found|invalid-login/.test((err && (err.code || err.message)) || '') && ++lgFails >= 5) lgLock = Date.now() + 30000 * Math.min(10, lgFails - 4); toast(authMsg(err), 'err'); }
 }
 async function resumeSession(user) {
   if (sessionOn) return;
   let prof = null, reached = true;
   const slow = setTimeout(() => toast('Conectando con el servidor… con datos móviles puede tardar unos segundos', 'info'), 4000);
   try { const sn = await withTimeout(rdb.ref('ixil/users/' + user.uid).once('value'), 30000); prof = sn.val(); clearTimeout(slow); }
-  catch (e) { clearTimeout(slow); reached = false; if (localStorage.getItem('ixil_owner') === user.uid) prof = S.users[user.uid] || null; }
+  catch (e) { clearTimeout(slow); reached = false; if (localStorage.getItem('ixil_owner') === user.uid) { prof = S.users[user.uid] || null; if (prof && prof.role === 'admin') prof = { ...prof, role: 'brigadista' }; } }   // sin conexión no se concede rol de administrador desde la copia local
+  if (reached) { try { const an = await withTimeout(rdb.ref('ixil/config/adminUid').once('value'), 15000); ADMIN_UID = an.val() || null; } catch (e) { ADMIN_UID = null; } }
+  prof = prof ? cleanRec('users', prof, user.uid) : null;
   if (!prof) {
     if (!reached) { await loadSetupState(); renderAuth(); return toast('No se pudo validar tu cuenta. Revisa tu internet.', 'err'); }
     justLoggedIn = false; await fbAuth.signOut(); await loadSetupState(); renderAuth();
@@ -1056,10 +1144,10 @@ async function resumeSession(user) {
 }
 function mustChange() {
   window.__lock = true;
-  openModal(MH('Crea tu contraseña') + `<p class="text-sm text-stone-600 mb-3">El administrador te dio una clave temporal. Elige una contraseña nueva para continuar.</p><form onsubmit="saveNewPw(event)" class="space-y-3"><div><label class="lbl">Nueva contraseña (mínimo 8)</label><input id="n-pw" type="password" minlength="8" required class="inp" autocomplete="new-password"></div><div><label class="lbl">Repite la contraseña</label><input id="n-pw2" type="password" minlength="8" required class="inp" autocomplete="new-password"></div><button class="btn w-full">Guardar y entrar</button></form>`);
+  openModal(MH('Crea tu contraseña') + `<p class="text-sm text-stone-600 mb-3">El administrador te dio una clave temporal. Elige una contraseña nueva para continuar.</p><form onsubmit="saveNewPw(event)" class="space-y-3"><div><label class="lbl">Nueva contraseña (mínimo 10, con letras y números)</label><input id="n-pw" type="password" minlength="10" required class="inp" autocomplete="new-password"></div><div><label class="lbl">Repite la contraseña</label><input id="n-pw2" type="password" minlength="10" required class="inp" autocomplete="new-password"></div><button class="btn w-full">Guardar y entrar</button></form>`);
 }
 async function saveNewPw(e) {
-  e.preventDefault(); const p = $('n-pw').value; if (p !== $('n-pw2').value) return toast('No coinciden', 'err');
+  e.preventDefault(); const p = $('n-pw').value; if (p !== $('n-pw2').value) return toast('No coinciden', 'err'); if (!pwOk(p)) return toast(PW_MSG, 'err');
   try { await fbAuth.currentUser.updatePassword(p); } catch (err) { return toast(authMsg(err), 'err'); }
   me = { ...me, mustChange: false }; S.users[me.id] = me; persist();
   rdb.ref('ixil/users/' + me.id + '/mustChange').set(false).catch(() => { });
@@ -1070,6 +1158,9 @@ function forgotModal() {
 }
 async function doForgot(e) {
   e.preventDefault(); const em = $('f-email').value.trim().toLowerCase();
+  if (em.length > 254 || !/^[^\s@<>"'`]+@[^\s@<>"'`]+$/.test(em)) return toast('El correo no es válido', 'err');
+  if (Date.now() - (window.__lastForgot || 0) < 60000) return toast('Espera un minuto antes de pedir otro enlace.', 'info');
+  window.__lastForgot = Date.now();
   try { await fbAuth.sendPasswordResetEmail(em); } catch (err) { }   // no se revela si el correo existe
   put('notes', { id: uid(), t: Date.now(), k: 'pass', txt: 'Solicitud de recuperación de contraseña: ' + em, email: em, open: true, uid: '' });
   closeModal(); toast('Si el correo tiene cuenta, recibirá un enlace para crear su contraseña.', 'info');
@@ -1233,7 +1324,7 @@ function drawPins() {
   if (!layer) return; layer.clearLayers();
   myPins().filter(p => F === 'all' || p.status === F).forEach(p => {
     L.marker([p.lat, p.lng], { icon: L.divIcon({ className: '', iconSize: [30, 30], iconAnchor: [15, 36], popupAnchor: [0, -34], html: `<div class="pin" style="background:${ST[p.status].c}"></div>` }) }).addTo(layer)
-      .bindPopup(`<div style="font-weight:800;font-size:15px">${esc(p.name)}</div><div style="color:#78716c">${esc(p.address || '')}</div><div style="margin-top:4px"><span style="background:${ST[p.status].c};color:#fff;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700">${ST[p.status].l}</span></div><div style="margin-top:5px;font-size:13px;color:#44403c"><b>Integrantes:</b> ${ppl(p)}</div><div style="font-size:13px;color:#44403c"><b>Seguimiento:</b> ${esc(({pending:'Pendiente de visita',visited:'Visitada',followup:'Requiere seguimiento'})[p.followUp] || 'Pendiente de visita')}</div>${p.notes ? `<div style="margin-top:6px;font-size:13px">${esc(p.notes)}</div>` : ''}<div style="display:flex;gap:6px;margin-top:10px"><button onclick="pinForm('${p.id}')" style="flex:1;background:#dc2626;color:#fff;border:0;border-radius:10px;padding:9px 10px;font-weight:700">Editar</button><a href="https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}" target="_blank" rel="noopener" style="flex:1;text-align:center;background:#eff6ff;color:#1d4ed8;border-radius:10px;padding:9px 10px;font-weight:700;text-decoration:none">Cómo llegar</a></div>`);
+      .bindPopup(`<div style="font-weight:800;font-size:15px">${esc(p.name)}</div><div style="color:#78716c">${esc(p.address || '')}</div><div style="margin-top:4px"><span style="background:${ST[p.status].c};color:#fff;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700">${ST[p.status].l}</span></div><div style="margin-top:5px;font-size:13px;color:#44403c"><b>Integrantes:</b> ${ppl(p)}</div><div style="font-size:13px;color:#44403c"><b>Seguimiento:</b> ${esc(({pending:'Pendiente de visita',visited:'Visitada',followup:'Requiere seguimiento'})[p.followUp] || 'Pendiente de visita')}</div>${p.notes ? `<div style="margin-top:6px;font-size:13px">${esc(p.notes)}</div>` : ''}<div style="display:flex;gap:6px;margin-top:10px"><button onclick="pinForm('${p.id}')" style="flex:1;background:#dc2626;color:#fff;border:0;border-radius:10px;padding:9px 10px;font-weight:700">Editar</button><a href="https://www.google.com/maps/dir/?api=1&destination=${Number(p.lat)||0},${Number(p.lng)||0}" target="_blank" rel="noopener" style="flex:1;text-align:center;background:#eff6ff;color:#1d4ed8;border-radius:10px;padding:9px 10px;font-weight:700;text-decoration:none">Cómo llegar</a></div>`);
   });
 }
 function renderChips() {
@@ -1250,7 +1341,7 @@ function renderList() {
   $('chips').innerHTML = [['all', 'Todos', sumP(pins)], ['secure', 'Verde', sumP(pins.filter(p => p.status === 'secure'))], ['doubtful', 'Amarillo', sumP(pins.filter(p => p.status === 'doubtful'))], ['danger', 'Rojo', sumP(pins.filter(p => p.status === 'danger'))]]
     .map(([k, l, n]) => `<button onclick="F='${k}';drawPins();renderList()" class="rounded-full py-2 transition ${F === k ? 'bg-red-600 text-white shadow' : 'bg-stone-100 text-stone-700 hover:bg-stone-200'}">${l} <span class="opacity-70">${n}</span></button>`).join('');
   const rows = pins.filter(p => F === 'all' || p.status === F).sort((a, b) => b.u - a.u);
-  $('plist').innerHTML = rows.map(p => `<div class="rounded-2xl border border-stone-200 bg-white p-3 flex gap-3 items-center hover:border-red-200 hover:shadow-md active:bg-stone-50 transition cursor-pointer" onclick="focusPin('${p.id}')"><div class="w-11 h-11 shrink-0 rounded-full flex items-center justify-center text-white font-bold" style="background:${ST[p.status].c}">${esc(ini(p.name))}</div><div class="flex-1 min-w-0"><div class="font-bold truncate">${esc(p.name)}</div><div class="text-sm text-stone-500 truncate">${esc(p.address || 'Sin domicilio')}</div><div class="text-xs text-stone-500 mt-0.5">${ppl(p)} integrante(s) · ${esc(({pending:'Pendiente de visita',visited:'Visitada',followup:'Requiere seguimiento'})[p.followUp] || 'Pendiente de visita')}</div><div class="mt-1 flex items-center gap-1.5 flex-wrap"><span class="text-[11px] font-bold rounded-full px-2 py-0.5 ${ST[p.status].b}">${ST[p.status].l}</span>${isAdmin() ? `<span class="text-[11px] text-stone-400 truncate">· ${esc(p.byName || '')}</span>` : ''}</div></div><a href="https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Cómo llegar (Google Maps)" class="w-9 h-9 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-600 transition flex items-center justify-center"><i class="fa-solid fa-route"></i></a><button onclick="event.stopPropagation();pinForm('${p.id}')" title="Editar" class="w-9 h-9 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-600 transition"><i class="fa-solid fa-pen"></i></button>${isAdmin() ? `<button onclick="event.stopPropagation();delPin('${p.id}')" title="Eliminar" class="w-9 h-9 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 transition"><i class="fa-solid fa-trash"></i></button>` : ''}</div>`).join('')
+  $('plist').innerHTML = rows.map(p => `<div class="rounded-2xl border border-stone-200 bg-white p-3 flex gap-3 items-center hover:border-red-200 hover:shadow-md active:bg-stone-50 transition cursor-pointer" onclick="focusPin('${p.id}')"><div class="w-11 h-11 shrink-0 rounded-full flex items-center justify-center text-white font-bold" style="background:${ST[p.status].c}">${esc(ini(p.name))}</div><div class="flex-1 min-w-0"><div class="font-bold truncate">${esc(p.name)}</div><div class="text-sm text-stone-500 truncate">${esc(p.address || 'Sin domicilio')}</div><div class="text-xs text-stone-500 mt-0.5">${ppl(p)} integrante(s) · ${esc(({pending:'Pendiente de visita',visited:'Visitada',followup:'Requiere seguimiento'})[p.followUp] || 'Pendiente de visita')}</div><div class="mt-1 flex items-center gap-1.5 flex-wrap"><span class="text-[11px] font-bold rounded-full px-2 py-0.5 ${ST[p.status].b}">${ST[p.status].l}</span>${isAdmin() ? `<span class="text-[11px] text-stone-400 truncate">· ${esc(p.byName || '')}</span>` : ''}</div></div><a href="https://www.google.com/maps/dir/?api=1&destination=${Number(p.lat)||0},${Number(p.lng)||0}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Cómo llegar (Google Maps)" class="w-9 h-9 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-600 transition flex items-center justify-center"><i class="fa-solid fa-route"></i></a><button onclick="event.stopPropagation();pinForm('${p.id}')" title="Editar" class="w-9 h-9 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-600 transition"><i class="fa-solid fa-pen"></i></button>${isAdmin() ? `<button onclick="event.stopPropagation();delPin('${p.id}')" title="Eliminar" class="w-9 h-9 rounded-xl bg-red-50 hover:bg-red-100 text-red-600 transition"><i class="fa-solid fa-trash"></i></button>` : ''}</div>`).join('')
     || empty('fa-map-pin', 'Aún no hay domicilios', 'Toca el mapa para registrar el primero.', isAdmin() && !list('pins').length ? '<button class="btn mt-4" onclick="demo()">Cargar 5 ejemplos</button>' : '');
 }
 function focusPin(id) { const p = S.pins[id]; if (!p) return; if (innerWidth < 1024) { $('side').classList.add('hidden'); $('side').classList.remove('flex'); } map.setView([p.lat, p.lng], 18); }
@@ -1296,8 +1387,8 @@ const dist = (a, b, c, d) => { const R = 6371000, r = x => x * Math.PI / 180, h 
 const readLocs = () => { try { return JSON.parse(localStorage.getItem('ixil_locs_v3') || '{}'); } catch (e) { return {}; } };
 async function startLocation() {
   if (isAdmin()) {
-    if (rdb) rdb.ref('ixil/locs').on('value', s => { locsCache = s.val() || {}; drawLive(); renderLive(); });
-    else liveTimer = setInterval(() => { locsCache = readLocs(); drawLive(); renderLive(); }, 5000);
+    if (rdb) rdb.ref('ixil/locs').on('value', s => { locsCache = cleanLocs(s.val()); drawLive(); renderLive(); });
+    else liveTimer = setInterval(() => { locsCache = cleanLocs(readLocs()); drawLive(); renderLive(); }, 5000);
   }
   if (!navigator.geolocation) return renderLive();
   const k = 'ixil_loc_ok_' + me.email;
@@ -1330,7 +1421,7 @@ function renderLive() {
   const el = $('live'); if (!el) return;
   if (isAdmin()) {
     const ops = activeOps();
-    el.innerHTML = `<div class="font-bold mb-2"><i class="fa-solid fa-satellite-dish text-red-600"></i> Brigadistas en línea (${ops.length})</div>` + (ops.map(o => `<div class="flex items-center justify-between py-1.5 border-t border-red-100"><div><div class="font-semibold">${esc(o.name)}</div><div class="text-xs text-stone-500">${ago(o.t)}</div></div><button onclick="map.setView([${o.lat},${o.lng}],18)" class="btn !py-1.5 !px-3 text-sm">Ver</button></div>`).join('') || '<div class="text-stone-500">Nadie activo por ahora.</div>') + (rdb ? '' : '<div class="text-xs text-stone-500 mt-2">Modo local: solo verás a quien use este mismo dispositivo. Con Firebase verás a todos.</div>');
+    el.innerHTML = `<div class="font-bold mb-2"><i class="fa-solid fa-satellite-dish text-red-600"></i> Brigadistas en línea (${ops.length})</div>` + (ops.map(o => `<div class="flex items-center justify-between py-1.5 border-t border-red-100"><div><div class="font-semibold">${esc(o.name)}</div><div class="text-xs text-stone-500">${ago(o.t)}</div></div><button onclick="map.setView([${Number(o.lat)||0},${Number(o.lng)||0}],18)" class="btn !py-1.5 !px-3 text-sm">Ver</button></div>`).join('') || '<div class="text-stone-500">Nadie activo por ahora.</div>') + (rdb ? '' : '<div class="text-xs text-stone-500 mt-2">Modo local: solo verás a quien use este mismo dispositivo. Con Firebase verás a todos.</div>');
   } else if (!myLoc) el.innerHTML = '<div class="font-bold"><i class="fa-solid fa-location-crosshairs text-red-600"></i> Mi ubicación</div><div class="text-stone-600 text-sm">Esperando tu ubicación. Activa el GPS y acepta el permiso.</div>';
   else {
     const near = myPins().map(p => ({ p, d: dist(myLoc.lat, myLoc.lng, p.lat, p.lng) })).sort((a, b) => a.d - b.d).slice(0, 3);
@@ -1392,7 +1483,7 @@ function renderAudit() {
   <div class="card divide-y divide-stone-100 overflow-hidden">${rows.map(l => { const [ic, tint] = evIcon(l.a); return `<div class="p-3.5 flex gap-3 hover:bg-stone-50 transition"><div class="w-10 h-10 shrink-0 rounded-full flex items-center justify-center ${tint}"><i class="fa-solid ${ic}"></i></div><div class="min-w-0 flex-1"><div class="text-sm font-semibold">${esc(l.a)}</div><div class="text-xs text-stone-500 truncate">${esc(l.name)} · ${esc(l.email)}</div></div><div class="text-right shrink-0"><div class="text-xs font-bold text-red-700">${new Date(l.t).toLocaleTimeString('es-MX', { timeStyle: 'medium' })}</div><div class="text-[11px] text-stone-400">${new Date(l.t).toLocaleDateString('es-MX', { dateStyle: 'medium' })}</div></div></div>`; }).join('') || empty('fa-clock-rotate-left', 'Sin movimientos', 'Aquí aparecerá cada acción con su fecha y hora.')}</div>`;
 }
 function exportLogs() {
-  const q = v => '"' + String(v).replace(/"/g, '""') + '"';
+  const q = v => '"' + csvSafe(v).replace(/"/g, '""') + '"';
   const csv = '\ufeffFecha y hora,Nombre,Correo,Acción\n' + list('logs').sort((a, b) => a.t - b.t).map(l => [q(fdt(l.t)), q(l.name), q(l.email), q(l.a)].join(',')).join('\n');
   const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = 'bitacora_ixil.csv'; a.click(); log('Exportó la bitácora');
 }
@@ -1405,11 +1496,12 @@ function renderUsers() {
   <div class="grid gap-3 md:grid-cols-2">${us.map(u => { const on = onl(u); return `<div class="card card-h p-4 ${u.active ? '' : '!border-red-300 !bg-red-50/50'}"><div class="flex items-center gap-3"><div class="relative w-14 h-14 shrink-0 rounded-full ${u.role === 'admin' ? 'bg-gradient-to-br from-red-600 to-red-800 text-white' : 'bg-red-50 text-red-700'} font-extrabold text-lg flex items-center justify-center">${esc(ini(u.name))}<span class="absolute bottom-0 right-0 w-4 h-4 rounded-full border-2 border-white ${on ? 'bg-green-500' : 'bg-stone-300'}"></span></div><div class="min-w-0 flex-1"><div class="font-bold truncate">${esc(u.name)}</div><div class="text-xs text-stone-500 truncate">${esc(u.email)}</div><div class="mt-1 flex flex-wrap items-center gap-1.5"><span class="text-[11px] font-bold rounded-full px-2 py-0.5 ${u.role === 'admin' ? 'bg-red-600 text-white' : 'bg-stone-100 text-stone-700'}">${u.role === 'admin' ? 'Administrador único' : 'Brigadista'}</span>${!u.active ? '<span class="text-[11px] font-bold rounded-full px-2 py-0.5 bg-red-100 text-red-700">Suspendido</span>' : ''}</div><div class="text-xs mt-1 ${on ? 'text-green-600 font-semibold' : 'text-stone-400'}">${on ? '● En línea' : 'Visto ' + ago(u.lastSeen)}</div></div></div>${u.role === 'admin' ? '' : `<div class="grid grid-cols-3 gap-2 mt-3 text-sm font-bold"><button class="rounded-xl py-2.5 transition ${u.active ? 'bg-amber-50 hover:bg-amber-100 text-amber-800' : 'bg-green-50 hover:bg-green-100 text-green-800'}" onclick="toggleUser('${u.id}')">${u.active ? 'Suspender' : 'Activar'}</button><button class="rounded-xl py-2.5 bg-stone-100 hover:bg-stone-200 transition" onclick="resetUser('${u.id}')">Nueva clave</button><button class="rounded-xl py-2.5 bg-red-50 hover:bg-red-100 text-red-700 transition" onclick="delUser('${u.id}')">Eliminar</button></div>`}</div>`; }).join('')}</div>`;
 }
 function userForm() {
-  openModal(MH('Crear usuario') + `<form onsubmit="saveUser(event)" class="space-y-3"><p class="text-sm text-stone-600">Se crea como <b>brigadista</b>. Solo existe un administrador.</p><div><label class="lbl">Nombre completo</label><input id="u-n" required class="inp"></div><div><label class="lbl">Correo</label><input id="u-e" type="email" required class="inp"></div><div><label class="lbl">Clave temporal</label><input id="u-p" required minlength="6" class="inp font-mono" value="${rnd(8)}"></div><button class="btn w-full">Crear usuario</button></form>`);
+  openModal(MH('Crear usuario') + `<form onsubmit="saveUser(event)" class="space-y-3"><p class="text-sm text-stone-600">Se crea como <b>brigadista</b>. Solo existe un administrador.</p><div><label class="lbl">Nombre completo</label><input id="u-n" required class="inp"></div><div><label class="lbl">Correo</label><input id="u-e" type="email" required class="inp"></div><div><label class="lbl">Clave temporal</label><input id="u-p" required minlength="8" class="inp font-mono" value="${rnd(12)}"></div><button class="btn w-full">Crear usuario</button></form>`);
 }
 async function saveUser(e) {
   e.preventDefault();
   const em = $('u-e').value.trim().toLowerCase(), name = $('u-n').value.trim(), pw = $('u-p').value;
+  if (pw.length < 8) return toast('La clave temporal debe tener al menos 8 caracteres.', 'err');
   const old = list('users').find(u => u.email === em);
   if (old && !old.deleted) return toast('Ese correo ya existe', 'err');
   try {
@@ -1729,7 +1821,7 @@ ${m ? `<div><label class="lbl">Jefa de manzana</label><select id="m-b" class="in
   // ---------- peticiones: qué quiere, si se cumplió, en proceso o pendiente ----------
   function reqsModal(ot, oid, bk) {
     const rs = rq(ot, oid).sort((a, b) => a.date < b.date ? 1 : -1);
-    openModal(MH('Peticiones · ' + esc(oname(ot, oid))) + (rs.length ? rs.map(r => `<div class="zrow" style="align-items:flex-start"><div style="flex:1"><div class="font-bold text-sm">${esc(r.text)}</div><div class="text-xs text-stone-500">${r.date}</div></div>
+    openModal(MH('Peticiones · ' + esc(oname(ot, oid))) + (rs.length ? rs.map(r => `<div class="zrow" style="align-items:flex-start"><div style="flex:1"><div class="font-bold text-sm">${esc(r.text)}</div><div class="text-xs text-stone-500">${esc(r.date)}</div></div>
 <select class="inp" style="width:auto;padding:.4rem;font-size:.8rem;border-color:${RS[r.st][1]}" onchange="setReq('${r.id}',this.value,'${ot}','${oid}','${bk}')">${Object.keys(RS).map(k => `<option value="${k}" ${r.st === k ? 'selected' : ''}>${RS[k][0]}</option>`).join('')}</select>
 <button class="zbs" onclick="editReq('${r.id}','${ot}','${oid}','${bk}')"><i class="fa-solid fa-pen"></i></button><button class="zbs" onclick="delReq('${r.id}','${ot}','${oid}','${bk}')"><i class="fa-solid fa-trash"></i></button></div>`).join('') : '<p class="text-sm text-stone-500">Sin peticiones todavía.</p>')
       + `<div class="mt-3"><label class="lbl">Nueva petición / qué quiere</label><input id="r-t" class="inp" placeholder="Ej. Alumbrado en la calle 20"><button class="btn w-full mt-2" onclick="addReq('${ot}','${oid}','${bk}')">Agregar petición</button></div>${bk ? `<button class="zbs mt-3" onclick="openBlock('${bk}')">← Volver al cuadro</button>` : ''}`);
@@ -1760,7 +1852,7 @@ ${l ? `<div class="zgr"><button type="button" class="zbs" onclick="reqsModal('le
 <p class="text-sm text-stone-500" style="margin-bottom:1rem">Un líder coordina varias jefas de manzana. Se coloca en el mapa de manzanas (estrella morada) y se asigna a cada jefa al crear o editar su cuadro.</p>` + (Ls.length ? `<div class="zg2">` + Ls.map(l => {
       const bs = A('blocks').filter(b => b.leaderId === l.id), ms = bs.flatMap(b => mOf(b.id)), z = zone(l.lat, l.lng), rr = rq('leader', l.id);
       return `<div class="card p-4"><div class="font-extrabold text-lg"><i class="fa-solid fa-star" style="color:#7c3aed"></i> ${esc(l.name)}</div><div class="text-sm text-stone-500">${esc(l.phone || 'Sin teléfono')}</div><div class="mt-2">${chip('Cuadrante ' + z + ' · ' + ZN[z], ZC[z])}</div>
-<div class="mt-3 text-sm"><b>${bs.length}</b> jefas · <b>${ms.length}</b> registrados · <b>${+l.own || 0}</b> votantes propios · total <b>${ms.length + (+l.own || 0)}</b>${l.goal ? " de meta " + l.goal : ""} · <b style="color:#16a34a">${pct(ms.filter(m => m.stance === 'favor').length, ms.length)}%</b> de acuerdo</div><div class="text-xs text-stone-500">${bs.map(b => esc(b.headName)).join(', ') || 'Sin jefas asignadas'}</div><div class="text-xs text-stone-500 mt-1">Sus peticiones: ${rsum(rr)}</div>
+<div class="mt-3 text-sm"><b>${bs.length}</b> jefas · <b>${ms.length}</b> registrados · <b>${+l.own || 0}</b> votantes propios · total <b>${ms.length + (+l.own || 0)}</b>${l.goal ? " de meta " + esc(l.goal) : ""} · <b style="color:#16a34a">${pct(ms.filter(m => m.stance === 'favor').length, ms.length)}%</b> de acuerdo</div><div class="text-xs text-stone-500">${bs.map(b => esc(b.headName)).join(', ') || 'Sin jefas asignadas'}</div><div class="text-xs text-stone-500 mt-1">Sus peticiones: ${rsum(rr)}</div>
 <div class="zgr"><button class="zbs" onclick="viewLeader('${l.id}')"><i class="fa-solid fa-map-pin"></i> Ver en mapa</button><button class="zbs" onclick="leaderForm('${l.id}')"><i class="fa-solid fa-pen"></i> Editar</button></div></div>`; }).join('') + `</div>` : `<div class="card p-6 text-center text-stone-500">Aún no hay líderes. Usa «Agregar líder» y toca el mapa.</div>`)
       + (sl.length ? `<div class="card p-4 mt-3"><div class="lbl">Jefas sin líder (${sl.length})</div><div class="text-sm">${sl.map(b => esc(b.headName)).join(', ')}</div></div>` : '');
   }
@@ -1845,23 +1937,23 @@ if(/persona|gente|habitant|poblacion|cuantos son/.test(x))return `En el mapa hay
 if(/familia|domicilio|casa/.test(x))return `<b>${k.fam}</b> familias: ${k.sec} seguras, ${k.dou} dudosas, ${k.opp} en oposición (${fm(k.pers)} personas).`;
 if(/registrad/.test(x))return `<b>${k.mem.length}</b> registrados: ${k.f} de acuerdo, ${k.d} indecisos, ${k.c} en contra.`;
 const w=x.split(/\s+/).filter(t=>t.length>2),hit=[...k.mem.map(m=>['Registrado',m.name,m,'m']),...k.pins.map(p=>['Familia',p.name,p,'p']),...k.blk.map(b=>['Jefa',b.headName,b,'b'])].filter(a=>{const n=nn(a[1]);return n&&w.filter(t=>n.includes(t)).length>=Math.min(2,w.length)&&w.some(t=>n.includes(t))}).slice(0,4);
-if(hit.length)return hit.map(a=>{const o=a[2];return a[3]==='m'?`<b>${esc(o.name)}</b> (registrado de ${esc((D('blocks')[o.blockId]||{}).headName||'—')}): ${({favor:'de acuerdo',duda:'indeciso',contra:'en contra'})[o.stance]||'—'}, registrado el ${o.date||'—'}.`:a[3]==='p'?`Familia <b>${esc(o.name)}</b>: ${ppl(o)} persona(s), estado ${({secure:'seguro',doubtful:'dudoso'})[o.status]||'oposición'}.`:`Jefa <b>${esc(o.headName)}</b>: ${mOf(o.id).length}/${goal(o)} registrados.`}).join('<br>');
+if(hit.length)return hit.map(a=>{const o=a[2];return a[3]==='m'?`<b>${esc(o.name)}</b> (registrado de ${esc((D('blocks')[o.blockId]||{}).headName||'—')}): ${({favor:'de acuerdo',duda:'indeciso',contra:'en contra'})[o.stance]||'—'}, registrado el ${esc(o.date||'—')}.`:a[3]==='p'?`Familia <b>${esc(o.name)}</b>: ${ppl(o)} persona(s), estado ${({secure:'seguro',doubtful:'dudoso'})[o.status]||'oposición'}.`:`Jefa <b>${esc(o.headName)}</b>: ${mOf(o.id).length}/${goal(o)} registrados.`}).join('<br>');
 return 'No entendí del todo. Prueba con “votos”, “personas”, “jefas atrasadas”, “peticiones”, “cuadrante noreste” o escribe “ayuda”.'}
 const own=l=>+l.own||0,ST={pend:'pendiente',proc:'en proceso',ok:'cumplida'},SP={favor:'de acuerdo',duda:'indeciso',contra:'en contra'},ph=v=>v?esc(v):'<i>sin teléfono</i>';
 const ow=r=>{const o=({member:D('members'),block:D('blocks'),leader:D('leaders')})[r.ot]||{},x=o[r.oid];return x?(x.headName||x.name):'(sin dueño)'};
-const pr=(t,id)=>A('reqs').filter(r=>r.ot===t&&r.oid===id).map(r=>esc(r.text)+' ('+(ST[r.st]||r.st)+')').join('; ')||'ninguno';
+const pr=(t,id)=>A('reqs').filter(r=>r.ot===t&&r.oid===id).map(r=>esc(r.text)+' ('+(esc(ST[r.st]||r.st))+')').join('; ')||'ninguno';
 const STOP=new Set('dime dame quiero saber sobre informacion datos como esta estan cuales cuantos cuantas quien quienes que tiene tienen tengo hay los las del por para con una uno mas muestrame busca buscar persona personas jefa jefas manzana manzanera manzaneras lider lideres votos voto problemas problema peticiones peticion telefono numero pendiente pendientes nombre nombres registrados registrado resumen ayuda lista todas todos todo falta faltan familias familia hoy debo hacer ver son sin cel hola buenos dias tardes'.split(' '));
 function who(x){const w=x.split(/\s+/).filter(t=>t.length>2&&!STOP.has(t));if(!w.length)return[];return[...A('blocks').map(o=>['b',o,o.headName]),...A('members').map(o=>['m',o,o.name]),...A('leaders').map(o=>['l',o,o.name])].filter(a=>{const n=nn(a[2]).split(' ');return w.every(t=>n.some(p=>p.startsWith(t)))}).slice(0,6)}
 function det(a){const[t,o]=a;if(t==='b'){const ms=mOf(o.id),c=s=>ms.filter(m=>m.stance===s).length,ld=D('leaders')[o.leaderId];return `<b><i class="fa-solid fa-house"></i> Jefa: ${esc(o.headName)}</b><br>`+L([`Cuadro: ${esc(o.name)}`,`Teléfono: ${ph(o.phone)}`,`Líder: ${ld?esc(ld.name):'sin líder'}`,`Votantes: ${ms.length} de ${goal(o)} · ${c('favor')} de acuerdo, ${c('duda')} indecisos, ${c('contra')} en contra`,`Problemas: ${pr('block',o.id)}`].concat(ms.length?['Sus registrados: '+nm(ms.map(m=>m.name))]:[]))}
-if(t==='m'){const b=D('blocks')[o.blockId];return `<b><i class="fa-solid fa-user"></i> ${esc(o.name)}</b><br>`+L([`Teléfono: ${ph(o.phone)}`,`Jefa: ${b?esc(b.headName):'sin asignar'}`,`Postura: ${SP[o.stance]||'—'}`,`Registrado: ${o.date||'—'}`,`Problemas: ${pr('member',o.id)}`])}
-const bs=A('blocks').filter(b=>b.leaderId===o.id),ms=bs.flatMap(b=>mOf(b.id));return `<b><i class="fa-solid fa-star" style="color:#7c3aed"></i> Líder: ${esc(o.name)}</b><br>`+L([`Teléfono: ${ph(o.phone)}`,`${bs.length} jefas: ${nm(bs.map(b=>b.headName))||'—'}`,`Votantes: ${ms.length} de sus jefas + ${own(o)} propios = <b>${ms.length+own(o)}</b>${o.goal?' de meta '+o.goal:''}`,`Problemas: ${pr('leader',o.id)}`])}
+if(t==='m'){const b=D('blocks')[o.blockId];return `<b><i class="fa-solid fa-user"></i> ${esc(o.name)}</b><br>`+L([`Teléfono: ${ph(o.phone)}`,`Jefa: ${b?esc(b.headName):'sin asignar'}`,`Postura: ${SP[o.stance]||'—'}`,`Registrado: ${esc(o.date||'—')}`,`Problemas: ${pr('member',o.id)}`])}
+const bs=A('blocks').filter(b=>b.leaderId===o.id),ms=bs.flatMap(b=>mOf(b.id));return `<b><i class="fa-solid fa-star" style="color:#7c3aed"></i> Líder: ${esc(o.name)}</b><br>`+L([`Teléfono: ${ph(o.phone)}`,`${bs.length} jefas: ${nm(bs.map(b=>b.headName))||'—'}`,`Votantes: ${ms.length} de sus jefas + ${own(o)} propios = <b>${ms.length+own(o)}</b>${o.goal?' de meta '+esc(o.goal):''}`,`Problemas: ${pr('leader',o.id)}`])}
 function pend(){const k=K();return{k,jn:k.blk.filter(b=>!b.phone),mn:k.mem.filter(m=>!m.phone),ln:k.led.filter(l=>!l.phone),low:k.jf.filter(j=>j.p<100),rq:A('reqs').filter(r=>r.st!=='ok')}}
 function ans2(q){const x=nn(q).replace(/[^a-z0-9\s]/g,' ').replace(/\s+/g,' ').trim(),h=who(x),p=pend(),k=p.k;
 if(h.length)return h.map(det).join('<hr style="margin:8px 0">');
 if(/sin (telefono|numero|cel)|falta.*(telefono|numero)|no tiene.*(telefono|numero)/.test(x)){const n=p.jn.length+p.mn.length+p.ln.length;return n?`Sin teléfono (${n}):<br>`+L([...p.jn.map(b=>'Jefa '+esc(b.headName)),...p.ln.map(l=>'Líder '+esc(l.name)),...p.mn.map(m=>esc(m.name)+' (de '+esc((D('blocks')[m.blockId]||{}).headName||'—')+')')].slice(0,25))+'<br><small>Agrégalos en Estadísticas → Pendientes.</small>':'Todos tienen teléfono <i class="fa-solid fa-circle-check" style="color:#16a34a"></i>'}
-if(/problema|queja|peticion|piden|necesit|pedido/.test(x)&&!/categor|mas piden|piden mas/.test(x))return p.rq.length?`<b>${p.rq.length}</b> problema(s) sin resolver:<br>`+L(p.rq.slice(0,20).map(r=>`${esc(ow(r))}: ${esc(r.text)} (${ST[r.st]||r.st})`)):'No hay problemas pendientes <i class="fa-solid fa-circle-check" style="color:#16a34a"></i>';
+if(/problema|queja|peticion|piden|necesit|pedido/.test(x)&&!/categor|mas piden|piden mas/.test(x))return p.rq.length?`<b>${p.rq.length}</b> problema(s) sin resolver:<br>`+L(p.rq.slice(0,20).map(r=>`${esc(ow(r))}: ${esc(r.text)} (${esc(ST[r.st]||r.st)})`)):'No hay problemas pendientes <i class="fa-solid fa-circle-check" style="color:#16a34a"></i>';
 if(/pendiente|que falta|me falta/.test(x)){const r=[p.jn.length&&`${p.jn.length} jefa(s) sin teléfono: ${nm(p.jn.map(b=>b.headName))}`,p.mn.length&&`${p.mn.length} registrado(s) sin teléfono: ${nm(p.mn.map(m=>m.name))}`,p.ln.length&&`${p.ln.length} líder(es) sin teléfono`,p.low.length&&`${p.low.length} jefa(s) bajo su meta: ${nm(p.low.map(j=>j.b.headName+' '+j.n+'/'+j.g))}`,p.rq.length&&`${p.rq.length} problema(s) sin resolver`,k.vp&&`${k.vp} visita(s) pendientes`].filter(Boolean);return r.length?'Pendientes:<br>'+L(r):'No hay nada pendiente <i class="fa-solid fa-circle-check" style="color:#16a34a"></i>'}
-if(/lider/.test(x))return k.led.length?'<b>Líderes y votos</b><br>'+L(k.led.map(l=>{const ms=k.blk.filter(b=>b.leaderId===l.id).flatMap(b=>mOf(b.id));return `${esc(l.name)} (${ph(l.phone)}): ${ms.length} registrados + ${own(l)} propios = <b>${ms.length+own(l)}</b>${l.goal?' de '+l.goal:''}`})):'Aún no hay líderes.';
+if(/lider/.test(x))return k.led.length?'<b>Líderes y votos</b><br>'+L(k.led.map(l=>{const ms=k.blk.filter(b=>b.leaderId===l.id).flatMap(b=>mOf(b.id));return `${esc(l.name)} (${ph(l.phone)}): ${ms.length} registrados + ${own(l)} propios = <b>${ms.length+own(l)}</b>${l.goal?' de '+esc(l.goal):''}`})):'Aún no hay líderes.';
 if(/(nombre|lista|quienes).*(jefa|manzanera)|(jefa|manzanera).*(nombre|lista)/.test(x))return k.blk.length?'<b>Jefas de manzana</b><br>'+L(k.blk.map(b=>`${esc(b.headName)} (${ph(b.phone)}) · ${mOf(b.id).length}/${goal(b)}`).slice(0,30)):'Aún no hay jefas.';
 if(/(nombre|lista|quienes).*(registrad|votante|persona|gente)/.test(x))return k.mem.length?`<b>Registrados (${k.mem.length})</b><br>`+L(k.mem.slice(0,30).map(m=>`${esc(m.name)} (${ph(m.phone)}) · ${SP[m.stance]||'—'}`)):'Aún no hay registrados.';
 return ans(q)}
@@ -1871,29 +1963,29 @@ function plus(){const root=$('stats');if(!root)return;const o=$('ixplus');if(o)o
 const kp=[['<i class="fa-solid fa-users"></i>','Personas en mapa',k.pers],['<i class="fa-solid fa-house"></i>','Familias',k.fam],['<i class="fa-solid fa-person-dress"></i>','Jefas',k.blk.length],['<i class="fa-solid fa-star" style="color:#7c3aed"></i>','Líderes',k.led.length],['<i class="fa-solid fa-check-to-slot"></i>','Registrados',k.mem.length],['<i class="fa-solid fa-circle-check" style="color:#16a34a"></i>','De acuerdo',k.f],['<i class="fa-solid fa-circle-question" style="color:#d97706"></i>','Indecisos',k.d],['<i class="fa-solid fa-ban" style="color:#dc2626"></i>','En contra',k.c],['<i class="fa-solid fa-clipboard-list"></i>','Problemas sin resolver',p.rq.length],['<i class="fa-solid fa-calendar-days"></i>','Visitas pendientes',k.vp]];
 const rec=[...k.mem].sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,12).map(m=>`<span><i class="fa-solid fa-user-plus"></i> ${esc(m.name)} · ${esc((D('blocks')[m.blockId]||{}).headName||'sin jefa')} · hace ${dAgo(m.date)} d</span>`).join('');
 const row=(t,s,b)=>`<div class="ixr"><div style="flex:1;min-width:0"><b>${t}</b><div class="ixs">${s}</div></div>${b}</div>`,eb=(f,l)=>`<button class="ixbtn" onclick="${f}">${l}</button>`;
-const pj=[...p.jn.slice(0,15).map(b=>row(esc(b.headName),'Jefa · '+esc(b.name)+' · falta teléfono',eb(`blockForm('${b.id}')`,'<i class="fa-solid fa-pen"></i> Agregar'))),...p.ln.slice(0,15).map(l=>row(esc(l.name),'Líder · falta teléfono',eb(`leaderForm('${l.id}')`,'<i class="fa-solid fa-pen"></i> Agregar'))),...p.mn.slice(0,15).map(m=>row(esc(m.name),'Registrado de '+esc((D('blocks')[m.blockId]||{}).headName||'—')+' · falta teléfono',eb(`memberForm('${m.blockId}','${m.id}')`,'<i class="fa-solid fa-pen"></i> Agregar'))),...p.low.slice(0,15).map(j=>row(esc(j.b.headName),`Lleva ${j.n} de ${j.g} · le faltan ${j.g-j.n}`+bar2(j.p,j.col),eb(`openBlock('${j.b.id}')`,'Ver'))),...p.rq.slice(0,15).map(r=>row(esc(ow(r)),esc(r.text)+' · '+(ST[r.st]||r.st),eb(`reqsModal('${r.ot}','${r.oid}','${r.ot==='member'?(D('members')[r.oid]||{}).blockId||'':r.ot==='block'?r.oid:''}')`,'Abrir')))];
+const pj=[...p.jn.slice(0,15).map(b=>row(esc(b.headName),'Jefa · '+esc(b.name)+' · falta teléfono',eb(`blockForm('${b.id}')`,'<i class="fa-solid fa-pen"></i> Agregar'))),...p.ln.slice(0,15).map(l=>row(esc(l.name),'Líder · falta teléfono',eb(`leaderForm('${l.id}')`,'<i class="fa-solid fa-pen"></i> Agregar'))),...p.mn.slice(0,15).map(m=>row(esc(m.name),'Registrado de '+esc((D('blocks')[m.blockId]||{}).headName||'—')+' · falta teléfono',eb(`memberForm('${m.blockId}','${m.id}')`,'<i class="fa-solid fa-pen"></i> Agregar'))),...p.low.slice(0,15).map(j=>row(esc(j.b.headName),`Lleva ${j.n} de ${j.g} · le faltan ${j.g-j.n}`+bar2(j.p,j.col),eb(`openBlock('${j.b.id}')`,'Ver'))),...p.rq.slice(0,15).map(r=>row(esc(ow(r)),esc(r.text)+' · '+(esc(ST[r.st]||r.st)),eb(`reqsModal('${r.ot}','${r.oid}','${r.ot==='member'?(D('members')[r.oid]||{}).blockId||'':r.ot==='block'?r.oid:''}')`,'Abrir')))];
 const html=`<div id="ixplus"><div class="ixg">${kp.map((a,i)=>`<div class="ixk" style="animation-delay:${i*.3}s">${a[0]}<b class="ixn" data-k="${a[1]}" data-to="${a[2]}">0</b><span class="ixs">${a[1]}</span></div>`).join('')}</div>
 ${rec?`<div class="ixt"><div class="ixtt">${rec}${rec}</div></div>`:''}
 <div class="ixc"><h3><i class="fa-solid fa-chart-column"></i> Avance en vivo</h3><div class="ixs"><b>${k.mem.length}</b> registrados de ${fm(G)} que piden las jefas (${G?Math.round(k.mem.length/G*100):0}%)</div>${bar2(G?k.mem.length/G*100:0,'#2563eb')}<div class="ixs">De acuerdo ${k.f}</div>${bar2(k.f/tt*100,'#16a34a')}<div class="ixs">Indecisos ${k.d}</div>${bar2(k.d/tt*100,'#f59e0b')}<div class="ixs">En contra ${k.c}</div>${bar2(k.c/tt*100,'#dc2626')}</div>
 <div class="ixc"><h3><i class="fa-solid fa-hourglass-half"></i> Pendientes (${pj.length?p.jn.length+p.ln.length+p.mn.length+p.low.length+p.rq.length:0})</h3>${pj.join('')||'<p class="ixs">Todo al corriente <i class="fa-solid fa-circle-check" style="color:#16a34a"></i></p>'}${more(pj,75)}</div>
-<div class="ixc"><h3><i class="fa-solid fa-star" style="color:#7c3aed"></i> Líderes y sus votos</h3>${k.led.map(l=>{const bs=k.blk.filter(b=>b.leaderId===l.id),ms=bs.flatMap(b=>mOf(b.id)),t=ms.length+own(l);return row(esc(l.name),`${bs.length} jefas · ${ms.length} registrados + ${own(l)} propios = <b>${t}</b>${l.goal?' de '+l.goal:''} · ${ph(l.phone)}`+bar2(l.goal?t/l.goal*100:0,'#7c3aed'),eb(`leaderForm('${l.id}')`,'<i class="fa-solid fa-pen"></i> Editar'))}).join('')||'<p class="ixs">Aún no hay líderes.</p>'}</div>
+<div class="ixc"><h3><i class="fa-solid fa-star" style="color:#7c3aed"></i> Líderes y sus votos</h3>${k.led.map(l=>{const bs=k.blk.filter(b=>b.leaderId===l.id),ms=bs.flatMap(b=>mOf(b.id)),t=ms.length+own(l);return row(esc(l.name),`${bs.length} jefas · ${ms.length} registrados + ${own(l)} propios = <b>${t}</b>${l.goal?' de '+esc(l.goal):''} · ${ph(l.phone)}`+bar2(l.goal?t/l.goal*100:0,'#7c3aed'),eb(`leaderForm('${l.id}')`,'<i class="fa-solid fa-pen"></i> Editar'))}).join('')||'<p class="ixs">Aún no hay líderes.</p>'}</div>
 <div class="ixc"><h3><i class="fa-solid fa-person-dress"></i> Manzaneras</h3>${k.jf.map(j=>row(esc(j.b.headName),`${ph(j.b.phone)} · ${j.n}/${j.g} registrados`+bar2(j.p,j.col),eb(`blockForm('${j.b.id}')`,'<i class="fa-solid fa-pen"></i> Editar'))).join('')||'<p class="ixs">Aún no hay jefas.</p>'}</div>
 <div class="ixc"><h3><i class="fa-solid fa-file-export"></i> Reportes y respaldo</h3><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="ixbtn" onclick="IX.xm()">Excel: registrados</button><button class="ixbtn" onclick="IX.xj()">Excel: jefas</button><button class="ixbtn" onclick="IX.xp()">Excel: peticiones</button><button class="ixbtn" onclick="IX.bk()"><i class="fa-solid fa-download"></i> Respaldo</button><label class="ixbtn"><i class="fa-solid fa-upload"></i> Restaurar<input type="file" accept=".json" hidden onchange="IX.rs(this)"></label></div></div></div>`;
 if(!$('ixcss'))document.head.insertAdjacentHTML('beforeend','<style id="ixcss">.ixg{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:12px}.ixk{background:#fff;border:1px solid #e7e5e4;border-radius:16px;padding:12px;animation:ixp 3s ease-in-out infinite}.ixk>i{font-size:1.4rem;display:block;margin-bottom:6px;color:#b91c1c}.ixc h3 i{margin-right:6px;color:#b91c1c}.ixbtn i{margin-right:4px}.ixk b{display:block;font-size:1.7rem;font-weight:800}@keyframes ixp{50%{transform:translateY(-3px)}}.ixb i{position:relative;transition:width 1.2s ease}.ixb i:after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.5),transparent);animation:ixsh 1.8s linear infinite}@keyframes ixsh{from{transform:translateX(-100%)}to{transform:translateX(100%)}}.ixt{overflow:hidden;background:#fef2f2;border:1px solid #fecaca;border-radius:12px;padding:8px 0;margin-bottom:12px}.ixtt{display:inline-flex;gap:32px;white-space:nowrap;font-size:.8rem;font-weight:600;color:#991b1b;animation:ixmq 45s linear infinite}@keyframes ixmq{to{transform:translateX(-50%)}}</style>');
 root.insertAdjacentHTML('afterbegin',html);const P0=window.__ixp||(window.__ixp={});root.querySelectorAll('.ixn').forEach(e=>{e.dataset.f=P0[e.dataset.k]||0;cnt(e,+e.dataset.to);P0[e.dataset.k]=+e.dataset.to});setTimeout(()=>root.querySelectorAll('[data-w]').forEach(i=>i.style.width=i.dataset.w+'%'),80)}
 const wa=(ph,t)=>{let d=String(ph||'').replace(/\D/g,'');if(d.length===10)d='52'+d;return d.length>=11?'https://wa.me/'+d+'?text='+encodeURIComponent(t):''};
 const dl=(n,txt,mt)=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([txt],{type:mt||'text/csv;charset=utf-8'}));a.download=n;a.click()};
-const csv=(n,rows)=>dl(n,'\ufeff'+rows.map(r=>r.map(c=>'"'+String(c??'').replace(/"/g,'""')+'"').join(',')).join('\n'));
+const csv=(n,rows)=>dl(n,'\ufeff'+rows.map(r=>r.map(c=>'"'+csvSafe(c).replace(/"/g,'""')+'"').join(',')).join('\n'));
 window.IX={
  meta(){const v=Number($('vt-m').value);if(!(v>0))return toast('Escribe una meta válida','err');P('mzcfg',{...(D('mzcfg').votos||{}),id:'votos',total:Math.round(v)});log('Fijó la meta de votos en '+fm(v));toast('Meta guardada');renderVT()},
- wa(id,t){const b=D('blocks')[id]||D('members')[id],u=wa(b.headPhone||b.phone,t==='r'?`Hola ${b.headName||b.name}, te recordamos la reunión de jefas de manzana. ¡Gracias por tu trabajo!`:`Hola ${b.name||b.headName}, ¿cómo estás? Seguimos en contacto contigo. ¿Hay algo que necesites?`);u?window.open(u,'_blank'):toast('Esta persona no tiene teléfono de 10 dígitos','err')},
+ wa(id,t){const b=D('blocks')[id]||D('members')[id],u=wa(b.headPhone||b.phone,t==='r'?`Hola ${b.headName||b.name}, te recordamos la reunión de jefas de manzana. ¡Gracias por tu trabajo!`:`Hola ${b.name||b.headName}, ¿cómo estás? Seguimos en contacto contigo. ¿Hay algo que necesites?`);u?window.open(u,'_blank','noopener,noreferrer'):toast('Esta persona no tiene teléfono de 10 dígitos','err')},
  hoy(id){const m=D('members')[id];P('members',{...m,lastContact:today()});log('Dio seguimiento a '+m.name);renderVT()},
  todas(){const k=K();openModal(MH('Mensaje a las jefas')+'<p class="text-xs text-stone-500 mb-2">Toca cada nombre: se abre WhatsApp con el mensaje listo.</p>'+k.blk.map(b=>`<button class="ixbtn" style="width:100%;margin:3px 0;text-align:left" onclick="IX.wa('${b.id}','r')"><i class="fa-solid fa-comment"></i> ${esc(b.headName)}</button>`).join(''))},
  xm(){csv('registrados_ixil.csv',[['Nombre','Teléfono','Postura','Jefa','Fecha','Quiere']].concat(A('members').map(m=>[m.name,m.phone,m.stance,(D('blocks')[m.blockId]||{}).headName,m.date,A('reqs').filter(r=>r.oid===m.id).map(r=>r.text).join(' | ')])))},
  xj(){const k=K();csv('jefas_ixil.csv',[['Jefa','Cuadrante','Registrados','Meta','Avance %','Días sin registrar']].concat(k.jf.map(j=>[j.b.headName,ZN[zone(j.b.lat,j.b.lng)],j.n,j.g,j.p,j.last>=999?'':j.last])))},
  xp(){csv('peticiones_ixil.csv',[['Categoría','Petición','Estado','Fecha']].concat(A('reqs').map(r=>[cat(r.text),r.text,r.st,r.date])))},
  bk(){dl('respaldo_ixil_'+today()+'.json',JSON.stringify(S),'application/json')},
- rs(inp){const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const o=JSON.parse(r.result);if(!o.users||!o.pins)throw 0;if(!confirm('Esto reemplaza TODOS los datos actuales por los del respaldo. ¿Continuar?'))return;const keep={users:S.users,logs:S.logs,notes:S.notes};S=Object.assign({dels:[]},o,keep);persist();toast('Respaldo restaurado');refresh()}catch(e){toast('Archivo de respaldo no válido','err')}};r.readAsText(f)},
+ rs(inp){const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const o=JSON.parse(r.result);if(!o.users||!o.pins)throw 0;if(!confirm('Esto reemplaza TODOS los datos actuales por los del respaldo. ¿Continuar?'))return;const keep={users:S.users,logs:S.logs,notes:S.notes},cl=cleanState(o);S=Object.assign({},cl,keep,{dels:S.dels||[]});persist();toast('Respaldo restaurado');refresh()}catch(e){toast('Archivo de respaldo no válido','err')}};r.readAsText(f)},
  ask(q){const i=$('ia-q'),t=(q||i.value).trim();if(!t)return;i.value='';const b=$('ia-b');b.insertAdjacentHTML('beforeend',`<div class="ixm u">${esc(t)}</div><div class="ixm a">${ans2(t)}</div>`);b.scrollTop=b.scrollHeight}};
 const bar=(p,c)=>`<div class="ixb"><i style="width:${Math.min(100,p)}%;background:${c}"></i></div>`;
 function renderVT(){const k=K(),pc=k.meta?Math.round(k.f/k.meta*100):0,cats={};k.rq.forEach(r=>{const c=cat(r.text);cats[c]=cats[c]||[0,0];cats[c][0]++;if(r.st==='ok')cats[c][1]++});const ct=Object.entries(cats).sort((a,b)=>b[1][0]-a[1][0]),mx=ct.length?ct[0][1][0]:1;
