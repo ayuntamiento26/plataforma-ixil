@@ -1787,7 +1787,7 @@ window.addEventListener('load', async () => {
 </style>
 <style>
 .zt{position:absolute;top:.75rem;left:.75rem;right:5.5rem;z-index:500;display:flex;gap:.5rem;overflow-x:auto;scrollbar-width:none}.zt::-webkit-scrollbar{display:none}
-.zbt{flex:none;background:#fff;border:0;border-radius:999px;padding:.6rem 1rem;font-weight:700;font-size:.85rem;box-shadow:0 4px 14px -4px rgba(0,0,0,.4);color:#292524}.zbt i{color:#dc2626;margin-right:.35rem}
+.zbt{flex:none;background:#fff;border:0;border-radius:999px;padding:.6rem 1rem;font-weight:700;font-size:.85rem;box-shadow:0 4px 14px -4px rgba(0,0,0,.4);color:#292524}.zbt i{color:#dc2626;margin-right:.35rem}.zbt.zon{background:#dc2626;color:#fff}.zbt.zon i{color:#fff}#mzmap.zedm{box-shadow:inset 0 0 0 4px rgba(220,38,38,.55)}#mzmap.zedm .leaflet-marker-draggable{cursor:move}
 #zhint{position:absolute;left:50%;bottom:1.5rem;transform:translateX(-50%);z-index:500;background:#1c1917;color:#fff;padding:.7rem 1rem;border-radius:1rem;font-weight:600;font-size:.85rem;gap:.75rem;align-items:center;max-width:92%}
 .zb{width:150px;background:#fff;border:3px solid;border-radius:.8rem;padding:.3rem .5rem .45rem;text-align:center;box-shadow:0 6px 16px -4px rgba(0,0,0,.5);position:relative;overflow:hidden;line-height:1.15}
 .zb b{display:block;font-size:.8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.zb small{font-size:.68rem;color:#57534e;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.zb i{position:absolute;left:0;bottom:0;height:5px}
@@ -1842,7 +1842,7 @@ window.addEventListener('load', async () => {
   // ---------- secciones ----------
   $('v-home').parentNode.insertAdjacentHTML('beforeend', `
 <section id="v-mz" class="absolute inset-0 hidden"><div id="mzmap" style="position:absolute;inset:0"></div>
-<div class="zt"><button class="zbt" onclick="addBlock()"><i class="fa-solid fa-plus"></i>Cuadro de jefa</button><button class="zbt" onclick="addLeader()"><i class="fa-solid fa-star"></i>Líder</button><button class="zbt" onclick="listModal()"><i class="fa-solid fa-list"></i>Jefas y registrados</button></div>
+<div class="zt"><button class="zbt" id="zedit" onclick="toggleEdit()"><i class="fa-solid fa-lock"></i><span>Mover: apagado</span></button><button class="zbt" onclick="addBlock()"><i class="fa-solid fa-plus"></i>Cuadro de jefa</button><button class="zbt" onclick="addLeader()"><i class="fa-solid fa-star"></i>Líder</button><button class="zbt" onclick="listModal()"><i class="fa-solid fa-list"></i>Jefas y registrados</button></div>
 <div id="zhint" style="display:none"></div></section>
 <section id="v-ld" class="absolute inset-0 overflow-y-auto hidden"><div class="max-w-5xl mx-auto p-4 lg:p-8" id="ld"></div></section>
 <section id="v-mzs" class="absolute inset-0 overflow-y-auto hidden"><div class="max-w-5xl mx-auto p-4 lg:p-8" id="mzs"></div></section>`);
@@ -1852,7 +1852,7 @@ window.addEventListener('load', async () => {
   window.refresh = function () { or(); if (!me || !isAdmin()) return; if (tab === 'mz') drawMZ(); if (tab === 'ld') renderLD(); if (tab === 'mzs') renderMZS(); };
 
   // ---------- mapa de manzanas ----------
-  let M, ml, pk = null, pl = null, zch = [];
+  let M, ml, pk = null, pl = null, zch = [], EDIT = false, DRAG = false;
   function initMZ() {
     if (M) { M.invalidateSize(); return; }
     const hosted = /^https?:$/.test(location.protocol), esri = (s, n) => L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/' + s + '/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, maxNativeZoom: n, attribution: 'Tiles &copy; Esri' }),
@@ -1874,20 +1874,28 @@ window.addEventListener('load', async () => {
     });
   }
   function pick(msg, cb) { pk = cb; const h = $('zhint'); h.innerHTML = `<i class="fa-solid fa-hand-pointer"></i><span>${msg}</span><button class="zbs" onclick="cancelPick()">Cancelar</button>`; h.style.display = 'flex'; }
+  function toggleEdit() {
+    EDIT = !EDIT; DRAG = false; cancelPick();
+    const b = $('zedit'); b.classList.toggle('zon', EDIT);
+    b.innerHTML = EDIT ? '<i class="fa-solid fa-lock-open"></i><span>Mover: ENCENDIDO</span>' : '<i class="fa-solid fa-lock"></i><span>Mover: apagado</span>';
+    $('mzmap').classList.toggle('zedm', EDIT);
+    drawMZ();
+    toast(EDIT ? 'Modo mover activado: arrastra nombres y líderes' : 'Mapa fijo: ya puedes navegar sin mover nada', 'info');
+  }
   function cancelPick() { pk = null; $('zhint').style.display = 'none'; }
   function zs() { const o = [0, 1, 2, 3, 4].map(() => ({ b: 0, r: 0, g: 0, f: 0, d: 0, c: 0 })); A('blocks').forEach(b => { const q = o[zone(b.lat, b.lng)]; q.b++; q.g += goal(b); mOf(b.id).forEach(m => { q.r++; q[m.stance === 'favor' ? 'f' : m.stance === 'contra' ? 'c' : 'd']++; }); }); return o; }
   function drawMZ() {
-    if (!M) return; ml.clearLayers(); const c = cfg(), s = BB[0][0], w = BB[0][1], n = BB[1][0], e = BB[1][1];
+    if (!M || DRAG) return; ml.clearLayers(); const c = cfg(), s = BB[0][0], w = BB[0][1], n = BB[1][0], e = BB[1][1];
     [[[c[0], w], [n, c[1]]], [[c[0], c[1]], [n, e]], [[s, w], [c[0], c[1]]], [[s, c[1]], [c[0], e]]].forEach((r, i) => L.rectangle(r, { color: ZC[i + 1], weight: 0, fillOpacity: .13, interactive: false }).addTo(ml));
     [[[c[0], w], [c[0], e]], [[s, c[1]], [n, c[1]]]].forEach(l => L.polyline(l, { color: '#facc15', weight: 3, dashArray: '8 8', interactive: false }).addTo(ml));
     const st = zs();
     [1, 2, 3, 4].forEach(z => L.marker([c[0] + (z < 3 ? .0035 : -.0035), c[1] + (z % 2 ? -.0045 : .0045)], { interactive: false, icon: L.divIcon({ className: 'zqw', iconSize: [0, 0], html: `<div class="zq">Cuadrante ${z} · ${ZN[z]}<br>${st[z].b} cuadros · ${st[z].r} registrados</div>` }) }).addTo(ml));
-    L.marker(c, { draggable: true, zIndexOffset: 900, icon: L.divIcon({ className: '', iconSize: [30, 30], iconAnchor: [15, 15], html: '<div class="zc0"><i class="fa-solid fa-crosshairs"></i></div>' }) }).addTo(ml).bindTooltip('Arrastra para mover la división del pueblo')
-      .on('dragend', ev => { const p = ev.target.getLatLng(); P('mzcfg', { id: 'main', lat: p.lat, lng: p.lng }); log('Editó la división del pueblo en 4 cuadrantes'); refresh(); });
-    A('blocks').forEach(b => { const p = pc(b), k = col(p); L.marker([b.lat, b.lng], { draggable: true, icon: L.divIcon({ className: '', iconSize: [150, 46], iconAnchor: [75, 23], html: `<div class="zb" style="border-color:${k}"><b>${esc(b.headName)}</b><small>${esc(b.name)} · ${mOf(b.id).length}/${goal(b)}</small><i style="width:${p}%;background:${k}"></i></div>` }) }).addTo(ml)
-      .on('click', () => openBlock(b.id)).on('dragend', ev => { const p = ev.target.getLatLng(); P('blocks', { ...D('blocks')[b.id], lat: p.lat, lng: p.lng }); log('Editó la ubicación del cuadro ' + b.name); refresh(); }); });
-    A('leaders').forEach(l => L.marker([l.lat, l.lng], { draggable: true, icon: L.divIcon({ className: '', iconSize: [130, 28], iconAnchor: [65, 14], html: `<div class="zl"><i class="fa-solid fa-star"></i> ${esc(l.name)}</div>` }) }).addTo(ml)
-      .on('click', () => leaderForm(l.id)).on('dragend', ev => { const p = ev.target.getLatLng(); P('leaders', { ...D('leaders')[l.id], lat: p.lat, lng: p.lng }); log('Editó la ubicación del líder ' + l.name); refresh(); }));
+    L.marker(c, { draggable: EDIT, zIndexOffset: 900, icon: L.divIcon({ className: '', iconSize: [30, 30], iconAnchor: [15, 15], html: '<div class="zc0"><i class="fa-solid fa-crosshairs"></i></div>' }) }).addTo(ml).bindTooltip(EDIT ? 'Arrastra para mover la división del pueblo' : 'División del pueblo (activa «Mover» para cambiarla)')
+      .on('dragstart', () => { DRAG = true; }).on('dragend', ev => { DRAG = false; const p = ev.target.getLatLng(); P('mzcfg', { id: 'main', lat: p.lat, lng: p.lng }); log('Editó la división del pueblo en 4 cuadrantes'); refresh(); });
+    A('blocks').forEach(b => { const p = pc(b), k = col(p); L.marker([b.lat, b.lng], { draggable: EDIT, icon: L.divIcon({ className: '', iconSize: [150, 46], iconAnchor: [75, 23], html: `<div class="zb" style="border-color:${k}"><b>${esc(b.headName)}</b><small>${esc(b.name)} · ${mOf(b.id).length}/${goal(b)}</small><i style="width:${p}%;background:${k}"></i></div>` }) }).addTo(ml)
+      .on('click', () => openBlock(b.id)).on('dragstart', () => { DRAG = true; }).on('dragend', ev => { DRAG = false; const p = ev.target.getLatLng(); P('blocks', { ...D('blocks')[b.id], lat: p.lat, lng: p.lng }); log('Editó la ubicación del cuadro ' + b.name); refresh(); }); });
+    A('leaders').forEach(l => L.marker([l.lat, l.lng], { draggable: EDIT, icon: L.divIcon({ className: '', iconSize: [130, 28], iconAnchor: [65, 14], html: `<div class="zl"><i class="fa-solid fa-star"></i> ${esc(l.name)}</div>` }) }).addTo(ml)
+      .on('click', () => leaderForm(l.id)).on('dragstart', () => { DRAG = true; }).on('dragend', ev => { DRAG = false; const p = ev.target.getLatLng(); P('leaders', { ...D('leaders')[l.id], lat: p.lat, lng: p.lng }); log('Editó la ubicación del líder ' + l.name); refresh(); }));
   }
 
   // ---------- cuadros de jefa de manzana ----------
@@ -2027,7 +2035,7 @@ ${l ? `<div class="zgr"><button type="button" class="zbs" onclick="reqsModal('le
     const t15 = jr.slice(0, 15); mk('zc5', 'bar', { labels: t15.map(j => j.b.headName), datasets: [{ label: 'Registrados', data: t15.map(j => j.n), backgroundColor: '#dc2626' }, { label: 'Meta', data: t15.map(j => goal(j.b)), backgroundColor: '#d6d3d1' }] }, { indexAxis: 'y' });
     const lk = [...Ld.map(l => [l.name, l.id]), ['Sin líder', '']]; mk('zc6', 'bar', { labels: lk.map(l => l[0]), datasets: [{ label: 'Registrados', data: lk.map(l => B.filter(b => (b.leaderId || '') === l[1] && (l[1] || !D('leaders')[b.leaderId])).reduce((t, b) => t + mOf(b.id).length, 0)), backgroundColor: '#7c3aed' }] }, { scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } });
   }
-  Object.assign(window, { addBlock, addLeader, blockForm, saveBlock, openBlock, swapHead, saveHead, delBlock, doDelBlock, memberForm, saveMember, delMember, reqsModal, addReq, setReq, editReq, delReq, leaderForm, saveLeader, delLeader, viewLeader, listModal, listFind, assignM, dupCk, cancelPick });
+  Object.assign(window, { addBlock, addLeader, blockForm, saveBlock, openBlock, swapHead, saveHead, delBlock, doDelBlock, memberForm, saveMember, delMember, reqsModal, addReq, setReq, editReq, delReq, leaderForm, saveLeader, delLeader, viewLeader, listModal, listFind, assignM, dupCk, cancelPick, toggleEdit });
 })();
 </script>
 
@@ -2122,7 +2130,7 @@ window.IX={
  xp(){csv('peticiones_ixil.csv',[['Categoría','Petición','Estado','Fecha']].concat(A('reqs').map(r=>[cat(r.text),r.text,r.st,r.date])))},
  bk(){dl('respaldo_ixil_'+today()+'.json',JSON.stringify(S),'application/json')},
  rs(inp){const f=inp.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const o=JSON.parse(r.result);if(!o.users||!o.pins)throw 0;if(!confirm('Esto reemplaza TODOS los datos actuales por los del respaldo. ¿Continuar?'))return;const keep={users:S.users,logs:S.logs,notes:S.notes},cl=cleanState(o);S=Object.assign({},cl,keep,{dels:S.dels||[]});persist();toast('Respaldo restaurado');refresh()}catch(e){toast('Archivo de respaldo no válido','err')}};r.readAsText(f)},
- ask(q){const i=$('ia-q'),t=(q||i.value).trim();if(!t)return;i.value='';const b=$('ia-b');b.insertAdjacentHTML('beforeend',`<div class="ixm u">${esc(t)}</div><div class="ixm a">${ans2(t)}</div>`);b.scrollTop=b.scrollHeight}};
+};
 const bar=(p,c)=>`<div class="ixb"><i style="width:${Math.min(100,p)}%;background:${c}"></i></div>`;
 function renderVT(){const k=K(),pc=k.meta?Math.round(k.f/k.meta*100):0,cats={};k.rq.forEach(r=>{const c=cat(r.text);cats[c]=cats[c]||[0,0];cats[c][0]++;if(r.st==='ok')cats[c][1]++});const ct=Object.entries(cats).sort((a,b)=>b[1][0]-a[1][0]),mx=ct.length?ct[0][1][0]:1;
 $('vt').innerHTML=`<div class="ixc"><h3><i class="fa-solid fa-bullseye"></i> Meta de votos</h3><div style="display:flex;gap:8px;margin:8px 0"><input id="vt-m" type="number" min="1" class="inp" placeholder="Meta total de votos" value="${k.meta||''}"><button class="ixbtn r" onclick="IX.meta()">Guardar</button></div>
@@ -2135,13 +2143,9 @@ ${k.jf.length?k.jf.map(j=>`<div class="ixr"><span style="width:12px;height:12px;
 <div class="ixc"><h3><i class="fa-solid fa-clipboard-list"></i> Peticiones por categoría</h3>${ct.map(([c,v])=>`<div style="margin:7px 0"><div class="ixs"><b>${c}</b> · ${v[0]} (${v[1]} cumplidas)</div>${bar(v[0]/mx*100,'#dc2626')}</div>`).join('')||'<p class="ixs">Sin peticiones.</p>'}</div>
 <div class="ixc"><h3><i class="fa-solid fa-file-export"></i> Reportes y respaldo</h3><div style="display:flex;gap:6px;flex-wrap:wrap"><button class="ixbtn" onclick="IX.xm()">Excel: registrados</button><button class="ixbtn" onclick="IX.xj()">Excel: jefas</button><button class="ixbtn" onclick="IX.xp()">Excel: peticiones</button><button class="ixbtn" onclick="IX.bk()"><i class="fa-solid fa-download"></i> Respaldo</button><label class="ixbtn"><i class="fa-solid fa-upload"></i> Restaurar<input type="file" accept=".json" hidden onchange="IX.rs(this)"></label></div></div>`}
 document.head.insertAdjacentHTML('beforeend','<style>.ixc{background:#fff;border:1px solid #e7e5e4;border-radius:18px;padding:14px;margin-bottom:12px}.ixc h3{font-weight:800;font-size:1rem}.ixs{font-size:.8rem;color:#57534e;margin-top:4px}.ixb{height:9px;background:#e7e5e4;border-radius:9px;overflow:hidden;margin-top:4px}.ixb i{display:block;height:100%}.ixr{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid #f5f5f4}.ixbtn{background:#f5f5f4;border:1px solid #e7e5e4;border-radius:12px;padding:7px 12px;font-weight:600;font-size:.8rem;cursor:pointer}.ixbtn.r{background:#b91c1c;color:#fff;border-color:#b91c1c}.ixm{max-width:86%;padding:9px 12px;border-radius:16px;margin:6px 0;font-size:.88rem;line-height:1.4}.ixm.u{background:#b91c1c;color:#fff;margin-left:auto}.ixm.a{background:#fff;border:1px solid #e7e5e4}</style>');
-$('v-home').parentNode.insertAdjacentHTML('beforeend',`<section id="v-vt" class="absolute inset-0 overflow-y-auto hidden"><div class="max-w-3xl mx-auto p-4 lg:p-8" id="vt"></div></section>
-<section id="v-ia" class="absolute inset-0 hidden"><div class="max-w-3xl mx-auto w-full" style="display:flex;flex-direction:column;height:100%;padding:12px"><div id="ia-b" style="flex:1;overflow-y:auto"><div class="ixm a"><i class="fa-solid fa-robot"></i> Soy tu asistente. Escríbeme lo que quieras (un nombre, “problemas”, “sin teléfono”, “pendientes”, “líderes”…) o toca una opción. Te respondo con nombres, teléfonos, problemas y números en tiempo real.</div></div>
-<div style="display:flex;gap:6px;overflow-x:auto;padding:6px 0">${['¿Quiénes tienen problemas?','¿Qué está pendiente?','Nombres de las jefas','Sin teléfono','Líderes y sus votos','¿Cuántos votos tengo?','Resumen','¿Qué debo hacer hoy?'].map(c=>`<button class="ixbtn" style="white-space:nowrap" onclick="IX.ask('${c}')">${c}</button>`).join('')}</div>
-<div style="display:flex;gap:8px;padding-bottom:8px"><input id="ia-q" class="inp" placeholder="Pregunta algo sobre tus datos…" onkeydown="if(event.key==='Enter')IX.ask()"><button class="ixbtn r" onclick="IX.ask()">Enviar</button></div></div></section>`);
-NAV.splice(7,0,['ia','fa-robot','Asistente',1,'Pregunta lo que quieras sobre tus datos']);
-const og=window.go,or=window.refresh,T=['vt','ia'];
-window.go=function(t){og(t);T.forEach(x=>{const v=$('v-'+x);v.classList.toggle('hidden',x!==t);v.classList.remove('fade')});if(t==='ia')setTimeout(()=>$('ia-q').focus(),120)};
+$('v-home').parentNode.insertAdjacentHTML('beforeend',`<section id="v-vt" class="absolute inset-0 overflow-y-auto hidden"><div class="max-w-3xl mx-auto p-4 lg:p-8" id="vt"></div></section>`);
+const og=window.go,or=window.refresh,T=['vt'];
+window.go=function(t){og(t);T.forEach(x=>{const v=$('v-'+x);v.classList.toggle('hidden',x!==t);v.classList.remove('fade')})};
 window.refresh=function(){or();if(!me||!isAdmin())return;if(tab==='vt')renderVT();if(tab==='stats')plus()};
 })();
 </script>
